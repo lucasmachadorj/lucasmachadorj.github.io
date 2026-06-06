@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lucas Machado — Journal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&family=DM+Mono:wght@300;400&display=swap" rel="stylesheet" />
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #f9f7f4;
+      --ink:      #1a1814;
+      --muted:    #8a8070;
+      --rule:     #e0dbd2;
+      --accent:   #c0392b;
+    }
+
+    html { font-size: 16px; }
+
+    body {
+      background: var(--bg);
+      color: var(--ink);
+      font-family: 'Cormorant Garamond', Georgia, serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      opacity: 0;
+      animation: fadeIn 1s ease forwards;
+    }
+
+    @keyframes fadeIn {
+      to { opacity: 1; }
+    }
+
+    /* ── Layout ── */
+    .site-wrap {
+      max-width: 680px;
+      margin: 0 auto;
+      padding: 0 2rem;
+      width: 100%;
+    }
+
+    /* ── Header ── */
+    header {
+      padding: 4rem 0 2.5rem;
+      border-bottom: 1px solid var(--rule);
+    }
+
+    .site-name {
+      font-size: clamp(2rem, 6vw, 3.25rem);
+      font-weight: 300;
+      letter-spacing: -0.01em;
+      line-height: 1.1;
+      animation: slideUp 0.8s ease forwards;
+      opacity: 0;
+      animation-delay: 0.15s;
+    }
+
+    .site-tagline {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.72rem;
+      font-weight: 300;
+      color: var(--muted);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      margin-top: 0.6rem;
+      animation: slideUp 0.8s ease forwards;
+      opacity: 0;
+      animation-delay: 0.28s;
+    }
+
+    /* ── Nav ── */
+    nav {
+      margin-top: 1.4rem;
+      display: flex;
+      gap: 2rem;
+      animation: slideUp 0.8s ease forwards;
+      opacity: 0;
+      animation-delay: 0.38s;
+    }
+
+    nav a {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.7rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      text-decoration: none;
+      transition: color 0.2s;
+      position: relative;
+    }
+
+    nav a::after {
+      content: '';
+      position: absolute;
+      bottom: -2px;
+      left: 0;
+      width: 0;
+      height: 1px;
+      background: var(--ink);
+      transition: width 0.25s ease;
+    }
+
+    nav a:hover { color: var(--ink); }
+    nav a:hover::after { width: 100%; }
+    nav a.active { color: var(--ink); }
+    nav a.active::after { width: 100%; }
+
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateY(14px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ── Main ── */
+    main {
+      flex: 1;
+      padding: 3.5rem 0 4rem;
+    }
+
+    /* ── Featured / Intro ── */
+    .intro {
+      margin-bottom: 3rem;
+      animation: slideUp 0.8s ease forwards;
+      opacity: 0;
+      animation-delay: 0.48s;
+    }
+
+    .intro p {
+      font-size: 1.35rem;
+      font-weight: 300;
+      line-height: 1.65;
+      color: var(--ink);
+      max-width: 540px;
+    }
+
+    .intro p em {
+      font-style: italic;
+      color: var(--muted);
+    }
+
+    /* ── Section label ── */
+    .section-label {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.65rem;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 1.5rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 1px solid var(--rule);
+    }
+
+    /* ── Post list ── */
+    .posts {
+      list-style: none;
+      animation: slideUp 0.8s ease forwards;
+      opacity: 0;
+      animation-delay: 0.6s;
+    }
+
+    .posts li {
+      padding: 1.4rem 0;
+      border-bottom: 1px solid var(--rule);
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 0 1.5rem;
+      align-items: baseline;
+      transition: background 0.2s;
+    }
+
+    .posts li:first-child { padding-top: 0; }
+
+    .post-date {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.65rem;
+      color: var(--muted);
+      letter-spacing: 0.05em;
+      white-space: nowrap;
+      padding-top: 0.25rem;
+    }
+
+    .post-content {}
+
+    .post-title {
+      font-size: 1.2rem;
+      font-weight: 400;
+      line-height: 1.3;
+    }
+
+    .post-title a {
+      color: var(--ink);
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+
+    .post-title a:hover { color: var(--accent); }
+
+    .post-excerpt {
+      font-size: 0.95rem;
+      color: var(--muted);
+      margin-top: 0.3rem;
+      line-height: 1.55;
+      font-style: italic;
+    }
+
+    /* ── Tags ── */
+    .tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      margin-top: 0.6rem;
+    }
+
+    .tag {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.6rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      border: 1px solid var(--rule);
+      padding: 0.15rem 0.5rem;
+      border-radius: 2px;
+      cursor: default;
+    }
+
+    /* ── About strip ── */
+    .about-strip {
+      margin-top: 4rem;
+      padding: 2rem 0;
+      border-top: 1px solid var(--rule);
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      animation: slideUp 0.8s ease forwards;
+      opacity: 0;
+      animation-delay: 0.72s;
+    }
+
+    .about-strip p {
+      font-size: 1rem;
+      font-weight: 300;
+      color: var(--muted);
+      line-height: 1.6;
+      max-width: 400px;
+    }
+
+    .about-strip a {
+      color: var(--ink);
+      text-decoration: none;
+      border-bottom: 1px solid var(--rule);
+      transition: border-color 0.2s;
+    }
+
+    .about-strip a:hover { border-color: var(--ink); }
+
+    .contact-link {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.68rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      text-decoration: none;
+      white-space: nowrap;
+      margin-left: 2rem;
+      transition: color 0.2s;
+    }
+
+    .contact-link:hover { color: var(--ink); }
+
+    /* ── Footer ── */
+    footer {
+      padding: 1.5rem 0;
+      border-top: 1px solid var(--rule);
+    }
+
+    .footer-inner {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .footer-copy {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.62rem;
+      color: var(--muted);
+      letter-spacing: 0.06em;
+    }
+
+    .footer-links {
+      display: flex;
+      gap: 1.4rem;
+    }
+
+    .footer-links a {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.62rem;
+      color: var(--muted);
+      text-decoration: none;
+      letter-spacing: 0.06em;
+      transition: color 0.2s;
+    }
+
+    .footer-links a:hover { color: var(--ink); }
+
+    /* ── Mobile ── */
+    @media (max-width: 540px) {
+      .site-wrap { padding: 0 1.25rem; }
+      header { padding: 2.5rem 0 2rem; }
+      .posts li {
+        grid-template-columns: 1fr;
+        gap: 0.25rem;
+      }
+      .about-strip { flex-direction: column; align-items: flex-start; gap: 1rem; }
+      .contact-link { margin-left: 0; }
+      .footer-inner { flex-direction: column; gap: 0.75rem; align-items: flex-start; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="site-wrap">
+
+    <!-- Header -->
+    <header>
+      <h1 class="site-name">Lucas Machado</h1>
+    </header>
+  </div>
+
+</body>
+</html>
