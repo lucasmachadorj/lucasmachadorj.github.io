@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Context window as a stack — Claude Code</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      background: #ffffff;
+      color: #1a1a1a;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem 1rem;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 680px;
+    }
+
+    h1 {
+      font-size: 20px;
+      font-weight: 500;
+      margin-bottom: 4px;
+      color: #1a1a1a;
+    }
+
+    .subtitle {
+      font-size: 13px;
+      color: #6b6b6b;
+      margin-bottom: 1.5rem;
+    }
+
+    .token-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 4px;
+    }
+
+    .token-row span {
+      font-size: 12px;
+      color: #6b6b6b;
+    }
+
+    .token-bar {
+      height: 6px;
+      background: #f1efe8;
+      border-radius: 3px;
+      margin-bottom: 1.25rem;
+      overflow: hidden;
+    }
+
+    .token-fill {
+      height: 100%;
+      border-radius: 3px;
+      background: #1d9e75;
+      transition: width 0.4s ease, background 0.4s ease;
+      width: 4%;
+    }
+
+    .controls {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+      margin-bottom: 0.75rem;
+    }
+
+    button {
+      padding: 8px 18px;
+      border-radius: 8px;
+      border: 0.5px solid #c8c6bc;
+      background: #ffffff;
+      color: #1a1a1a;
+      font-size: 13px;
+      font-family: inherit;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    button:hover:not(:disabled) { background: #f1efe8; }
+    button:disabled { opacity: 0.35; cursor: not-allowed; }
+
+    button.danger {
+      border-color: #993c1d;
+      color: #712b13;
+      background: #faece7;
+    }
+    button.danger:hover:not(:disabled) { background: #f5c4b3; }
+
+    button.reset {
+      margin-left: auto;
+      font-size: 12px;
+      color: #888780;
+      border-color: #d3d1c7;
+    }
+
+    .annotation {
+      font-size: 12px;
+      color: #6b6b6b;
+      min-height: 1.5em;
+      margin-bottom: 1rem;
+      transition: opacity 0.2s;
+    }
+
+    .top-pointer {
+      font-size: 11px;
+      font-weight: 500;
+      color: #d85a30;
+      margin-bottom: 4px;
+      display: none;
+    }
+
+    .stack {
+      display: flex;
+      flex-direction: column-reverse;
+      gap: 6px;
+      min-height: 300px;
+      justify-content: flex-start;
+    }
+
+    .frame {
+      border-radius: 8px;
+      padding: 10px 16px;
+      border: 0.5px solid;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      animation: slide-in 0.28s ease;
+    }
+
+    @keyframes slide-in {
+      from { opacity: 0; transform: translateY(10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .frame.fixed   { background: #e6f1fb; border-color: #185fa5; }
+    .frame.skills  { background: #eeedfe; border-color: #534ab7; }
+    .frame.memory  { background: #e1f5ee; border-color: #0f6e56; }
+    .frame.turn    { background: #f1efe8; border-color: #5f5e5a; }
+
+    .frame-label {
+      font-size: 13px;
+      font-weight: 500;
+    }
+    .frame.fixed  .frame-label { color: #0c447c; }
+    .frame.skills .frame-label { color: #3c3489; }
+    .frame.memory .frame-label { color: #085041; }
+    .frame.turn   .frame-label { color: #444441; }
+
+    .frame-sub {
+      font-size: 11px;
+      margin-top: 2px;
+    }
+    .frame.fixed  .frame-sub { color: #185fa5; }
+    .frame.skills .frame-sub { color: #534ab7; }
+    .frame.memory .frame-sub { color: #0f6e56; }
+    .frame.turn   .frame-sub { color: #5f5e5a; }
+
+    .badge {
+      font-size: 10px;
+      font-weight: 500;
+      padding: 2px 9px;
+      border-radius: 99px;
+      white-space: nowrap;
+      flex-shrink: 0;
+      margin-left: 12px;
+    }
+    .badge-fixed { background: #e6f1fb; color: #0c447c; border: 0.5px solid #185fa5; }
+    .badge-push  { background: #f1efe8; color: #444441; border: 0.5px solid #5f5e5a; }
+    .badge-top   { background: #faece7; color: #712b13; border: 0.5px solid #993c1d; }
+
+    .bottom-label {
+      font-size: 11px;
+      color: #b4b2a9;
+      text-align: center;
+      padding: 8px;
+      border-top: 1px dashed #d3d1c7;
+      margin-top: 6px;
+      letter-spacing: 0.04em;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 1.5rem;
+      padding-top: 1rem;
+      border-top: 0.5px solid #e8e6df;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: #6b6b6b;
+    }
+
+    .legend-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 2px;
+      flex-shrink: 0;
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <h1>Context window as a stack</h1>
+  <p class="subtitle">Claude Code · agent loop push / <code>rewind</code> pop</p>
+
+  <div class="token-row">
+    <span>Token usage</span>
+    <span id="token-label">~8k / 200k</span>
+  </div>
+  <div class="token-bar">
+    <div class="token-fill" id="token-fill"></div>
+  </div>
+
+  <div class="controls">
+    <button id="btn-push" onclick="doPush()">+ Agent loop turn</button>
+    <button class="danger" id="btn-rewind" onclick="doRewind()" disabled>↩ rewind</button>
+    <button class="reset" onclick="doReset()">Reset</button>
+  </div>
+
+  <div class="annotation" id="annotation">Fixed frames injected on every call — system prompt, skills, memory.</div>
+
+  <div class="top-pointer" id="top-pointer">▶ TOP OF STACK</div>
+  <div class="stack" id="stack"></div>
+  <div class="bottom-label">⊥ bottom of stack — always present</div>
+
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:#e6f1fb;border:0.5px solid #185fa5"></div>System prompt</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#eeedfe;border:0.5px solid #534ab7"></div>Skills &amp; tools</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#e1f5ee;border:0.5px solid #0f6e56"></div>Memory</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#f1efe8;border:0.5px solid #5f5e5a"></div>Agent loop turn (dynamic)</div>
+  </div>
+
+</div>
+
+<script>
+  const FIXED_FRAMES = [
+    { type: 'fixed',  label: 'System prompt',    sub: 'Identity · goals · constraints · output format' },
+    { type: 'skills', label: 'Skills & tools',   sub: 'Tool schemas · MCP definitions · retrieved skills' },
+    { type: 'memory', label: 'Memory',            sub: 'Retrieved facts · prior summaries · user preferences' },
+  ];
+
+  const TURN_TEMPLATES = [
+    { label: 'Turn 1', sub: 'User: "refactor auth module"  →  model plans next steps' },
+    { label: 'Turn 2', sub: 'Tool: read_file auth.ts  →  file contents injected' },
+    { label: 'Turn 3', sub: 'Tool: write_file auth.ts  →  edit applied' },
+    { label: 'Turn 4', sub: 'Tool: run_tests  →  2 failures observed' },
+    { label: 'Turn 5', sub: 'Model: diagnoses failures, plans fix' },
+    { label: 'Turn 6', sub: 'Tool: write_file auth.ts  →  patch applied' },
+    { label: 'Turn 7', sub: 'Tool: run_tests  →  all tests passing' },
+  ];
+
+  const TOKEN_SIZES = [8, 8, 8, 14, 22, 32, 44, 58, 74];
+  const MAX_TOKENS = 200;
+
+  const ANNOTATIONS = [
+    'Fixed frames injected on every call — system prompt, skills, memory.',
+    'Turn 1 pushed. Model sees the full stack from bottom to top.',
+    'Turn 2 pushed. Tool result is part of this frame.',
+    'Turn 3 pushed. Stack growing — token budget shrinking.',
+    'Turn 4 pushed. Tests failed. You can rewind to retry from Turn 3.',
+    'Turn 5 pushed.',
+    'Turn 6 pushed. Another patch applied.',
+    'Turn 7 pushed. All tests pass — stack tells the full story.',
+  ];
+
+  let turnIndex = 0;
+  let dynamicFrames = [];
+
+  function totalTokens() {
+    return TOKEN_SIZES[Math.min(dynamicFrames.length, TOKEN_SIZES.length - 1)];
+  }
+
+  function render() {
+    const stack = document.getElementById('stack');
+    stack.innerHTML = '';
+
+    FIXED_FRAMES.forEach(f => {
+      const el = document.createElement('div');
+      el.className = `frame ${f.type}`;
+      el.innerHTML = `
+        <div>
+          <div class="frame-label">${f.label}</div>
+          <div class="frame-sub">${f.sub}</div>
+        </div>
+        <span class="badge badge-fixed">always present</span>`;
+      stack.appendChild(el);
+    });
+
+    dynamicFrames.forEach((f, i) => {
+      const isTop = i === dynamicFrames.length - 1;
+      const el = document.createElement('div');
+      el.className = `frame turn${f.isNew ? '' : ''}`;
+      el.innerHTML = `
+        <div>
+          <div class="frame-label">${f.label}</div>
+          <div class="frame-sub">${f.sub}</div>
+        </div>
+        <span class="badge ${isTop ? 'badge-top' : 'badge-push'}">${isTop ? 'TOP ↑' : 'pushed'}</span>`;
+      stack.appendChild(el);
+    });
+
+    const ptr = document.getElementById('top-pointer');
+    ptr.style.display = dynamicFrames.length > 0 ? 'block' : 'none';
+
+    const pct = Math.min((totalTokens() / MAX_TOKENS) * 100, 100);
+    const fill = document.getElementById('token-fill');
+    fill.style.width = pct + '%';
+    fill.style.background = pct > 55 ? '#d85a30' : pct > 30 ? '#ba7517' : '#1d9e75';
+    document.getElementById('token-label').textContent =
+      `~${totalTokens()}k / 200k`;
+
+    document.getElementById('btn-rewind').disabled = dynamicFrames.length === 0;
+    document.getElementById('btn-push').disabled = turnIndex >= TURN_TEMPLATES.length;
+
+    document.getElementById('annotation').textContent =
+      ANNOTATIONS[Math.min(dynamicFrames.length, ANNOTATIONS.length - 1)];
+  }
+
+  function doPush() {
+    if (turnIndex >= TURN_TEMPLATES.length) return;
+    dynamicFrames.push({ ...TURN_TEMPLATES[turnIndex++], isNew: true });
+    render();
+  }
+
+  function doRewind() {
+    if (dynamicFrames.length === 0) return;
+    dynamicFrames.pop();
+    turnIndex = Math.max(0, turnIndex - 1);
+    document.getElementById('annotation').textContent =
+      '↩ rewind — top frame popped. Last turn discarded from context.';
+    render();
+  }
+
+  function doReset() {
+    dynamicFrames = [];
+    turnIndex = 0;
+    render();
+  }
+
+  render();
+</script>
+</body>
+</html>
