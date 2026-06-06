@@ -114,6 +114,10 @@
   .select-hint{font-size:10px;color:var(--muted);padding:8px 12px;background:var(--surface);border:1px solid var(--border);border-radius:6px;margin-bottom:12px;line-height:1.5;font-family:var(--font-mono)}
   .shortcut-hint{font-size:10px;color:var(--muted);padding:10px 12px;border-top:1px solid var(--border);flex-shrink:0;line-height:1.8}
   .kbd{display:inline-block;font-family:var(--font-mono);font-size:10px;background:var(--surface2);border:1px solid var(--border2);border-radius:3px;padding:1px 5px;color:var(--text)}
+  .frame.code-reverted{opacity:0.6;border-style:dashed}
+  .badge-reverted{background:#fff2f2;color:#c0202a;border:1px solid #f09090}
+    #compact-overlay{display:none;position:fixed;inset:0;flex-direction:column;align-items:center;justify-content:center;gap:18px}
+  #compact-overlay.active{display:flex}
 </style>
 </head>
 <body>
@@ -222,7 +226,7 @@ const FIXED = [
 ];
 
 const TURNS = [
-  { name:'Turn 1 — read file',       sub:'read_file auth.py',                   annotation:'Model reads the existing auth.py. No changes yet — context window loads the full file.',                                        diff:null,                          tokens:18 },
+  { name:'Turn 1 — read file',       sub:'read_file auth.py',                   annotation:'Model reads the existing auth.py. No changes yet — context window loads the full file.',                                        diff:null,                          tokens:8 },
   { name:'Turn 2 — extract hash fn', sub:'write_file auth.py',                  annotation:'Agent extracts inline password hashing into a dedicated hash_password() function.',
     diff:{ adds:8, rems:3, lines:[
       {type:'hunk',code:'@@ -1,12 +1,17 @@'},
@@ -245,7 +249,7 @@ const TURNS = [
       {type:'rem', code:'-    return db.check(username, hashed)'},
       {type:'add', code:'+    hashed = hash_password(password)'},
       {type:'add', code:'+    return db.check(username, hashed)'},
-    ]}, tokens:28 },
+    ]}, tokens:14 },
   { name:'Turn 3 — add JWT',         sub:'write_file auth.py',                  annotation:'Agent adds JWT token generation and a verify_token() function.',
     diff:{ adds:14, rems:0, lines:[
       {type:'hunk',code:'@@ -3,6 +3,20 @@'},
@@ -268,8 +272,8 @@ const TURNS = [
       {type:'add', code:'+'},
       {type:'add', code:'+def verify_token(token: str) -> dict:'},
       {type:'add', code:'+    return jwt.decode(token, SECRET, algorithms=[JWT_ALGO])'},
-    ]}, tokens:40 },
-  { name:'Turn 4 — run tests ✗',     sub:'bash: pytest tests/test_auth.py',     annotation:'2 test failures. ImportError: No module named jwt. Missing dependency in requirements.txt.',      diff:null, isError:true,   tokens:52 },
+    ]}, tokens:20 },
+  { name:'Turn 4 — run tests ✗',     sub:'bash: pytest tests/test_auth.py',     annotation:'2 test failures. ImportError: No module named jwt. Missing dependency in requirements.txt.',      diff:null, isError:true,   tokens:28 },
   { name:'Turn 5 — fix import',      sub:'write_file requirements.txt + auth.py',annotation:'Agent adds PyJWT to requirements and fixes the import alias (jwt → PyJWT convention).',
     diff:{ adds:3, rems:1, lines:[
       {type:'hunk',code:'@@ -1,6 +1,8 @@ requirements.txt'},
@@ -281,8 +285,46 @@ const TURNS = [
       {type:'rem', code:'-import jwt'},
       {type:'add', code:'+import jwt  # PyJWT'},
       {type:'ctx', code:' import datetime'},
-    ]}, tokens:66 },
-  { name:'Turn 6 — run tests ✓',     sub:'bash: pytest tests/test_auth.py',     annotation:'All 8 tests passing. auth.py refactor complete.',                                                    diff:null, isSuccess:true, tokens:74 },
+    ]}, tokens:36 },
+  { name:'Turn 6 — run tests ✓',     sub:'bash: pytest tests/test_auth.py',     annotation:'All 8 tests passing. auth.py refactor complete.',                                                    diff:null, isSuccess:true, tokens:44 },
+  { name:'Turn 7 — add rate limiting', sub:'write_file auth.py + middleware.py',  annotation:'Agent adds per-user rate limiting middleware and updates auth.py to integrate it.',
+    diff:{ adds:31, rems:2, lines:[
+      {type:'hunk',code:'@@ -0,0 +1,28 @@ middleware.py (new file)'},
+      {type:'add', code:'+from functools import wraps'},
+      {type:'add', code:'+from flask import request, jsonify, g'},
+      {type:'add', code:'+import redis, time'},
+      {type:'add', code:'+'},
+      {type:'add', code:'+r = redis.Redis(host="localhost", port=6379)'},
+      {type:'add', code:'+'},
+      {type:'add', code:'+def rate_limit(max_calls=10, window=60):'},
+      {type:'add', code:'+    def decorator(fn):'},
+      {type:'add', code:'+        @wraps(fn)'},
+      {type:'add', code:'+        def wrapper(*args, **kwargs):'},
+      {type:'add', code:'+            key = f"rl:{request.remote_addr}:{fn.__name__}"'},
+      {type:'add', code:'+            count = r.incr(key)'},
+      {type:'add', code:'+            if count == 1:'},
+      {type:'add', code:'+                r.expire(key, window)'},
+      {type:'add', code:'+            if count > max_calls:'},
+      {type:'add', code:'+                return jsonify(error="Rate limit exceeded"), 429'},
+      {type:'add', code:'+            return fn(*args, **kwargs)'},
+      {type:'add', code:'+        return wrapper'},
+      {type:'add', code:'+    return decorator'},
+      {type:'hunk',code:'@@ -1,8 +1,11 @@ auth.py'},
+      {type:'ctx', code:' import jwt  # PyJWT'},
+      {type:'ctx', code:' import datetime'},
+      {type:'add', code:'+from middleware import rate_limit'},
+      {type:'ctx', code:''},
+      {type:'ctx', code:' def authenticate(username, password):'},
+      {type:'rem', code:'-    hashed = hash_password(password)'},
+      {type:'rem', code:'-    return db.check(username, hashed)'},
+      {type:'add', code:'+    hashed = hash_password(password)'},
+      {type:'add', code:'+    result = db.check(username, hashed)'},
+      {type:'add', code:'+    return result'},
+      {type:'add', code:'+'},
+      {type:'add', code:'+@rate_limit(max_calls=5, window=60)'},
+      {type:'add', code:'+def login_endpoint(username, password):'},
+      {type:'add', code:'+    return authenticate(username, password)'},
+    ]}, tokens:52 },
 ];
 
 let dynFrames=[], turnPtr=0, selectedId=null;
@@ -305,9 +347,10 @@ function renderStack(){
     const d=document.createElement('div');
     d.className=['frame', f.type||'type-turn', isSelected?'selected':'', f.summarized?'summarized':''].join(' ');
     d.onclick=()=>selectFrame(fid);
-    let badge=isTop&&!f.summarized?`<div class="frame-badge badge-top">TOP</div>`:'';
+    let badge=isTop&&!f.summarized&&!f.codeReverted?`<div class="frame-badge badge-top">TOP</div>`:'';
     if(f.type==='type-sumfrom') badge=`<div class="frame-badge badge-sumfrom">summary</div>`;
     if(f.type==='type-sumto')   badge=`<div class="frame-badge badge-sumto">summary</div>`;
+    if(f.codeReverted) badge=`<div class="frame-badge badge-reverted">code reverted</div>`;
     const name=f.summarized?('⊞ '+f.label):TURNS[f.turnIdx].name;
     const sub =f.summarized?'Compressed context':TURNS[f.turnIdx].sub;
     d.innerHTML=`${badge}<div class="frame-name">${name}</div><div class="frame-sub">${sub}</div>`;
@@ -327,6 +370,14 @@ function renderDiff(){
     if(!isNaN(idx)&&dynFrames[idx]&&!dynFrames[idx].summarized) turn=TURNS[dynFrames[idx].turnIdx];
   } else if(dynFrames.length>0&&!dynFrames[dynFrames.length-1].summarized){
     turn=TURNS[dynFrames[dynFrames.length-1].turnIdx];
+  }
+  // if selected frame has code reverted, show that instead of the diff
+  const selFrameForDiff=selectedId?dynFrames[parseInt(selectedId.replace('turn-',''))]:null;
+  if(selFrameForDiff&&selFrameForDiff.codeReverted){
+    fb.style.display='none'; se.textContent='';
+    scroll.innerHTML='<div class="diff-empty" style="color:#c0202a">↩ code reverted — file state restored to rewind point</div>';
+    ann.textContent="Conversation preserved. File changes after the rewind point have been undone.";
+    return;
   }
   if(!turn){
     scroll.innerHTML='<div class="diff-empty">← push a turn to see code changes</div>';
@@ -364,7 +415,7 @@ function renderActions(){
   const hasDiff=selFrame&&!selFrame.summarized&&TURNS[selFrame.turnIdx]&&TURNS[selFrame.turnIdx].diff!=null;
   document.getElementById('btn-both').disabled=!hasSel||isSummary||!hasDiff;
   document.getElementById('btn-conv').disabled=!hasSel||isSummary;
-  document.getElementById('btn-code').disabled=!hasSel||isSummary||!hasDiff;
+  document.getElementById('btn-code').disabled=!hasSel||isSummary;
   document.getElementById('btn-sumfrom').disabled=!hasSel||after<1||isSummary;
   document.getElementById('btn-sumto').disabled=!hasSel||before<1||isSummary;
   const hint=document.getElementById('select-hint');
@@ -376,13 +427,18 @@ function renderActions(){
   }
 }
 
+function calcTokens(){
+  return dynFrames.reduce((a,f)=>a+(f.summarized?6:TURNS[f.turnIdx].tokens),8);
+}
 function renderTokens(){
-  const total=dynFrames.reduce((a,f)=>a+(f.summarized?6:TURNS[f.turnIdx].tokens),8);
+  const total=calcTokens();
   const pct=Math.min((total/200)*100,100);
   const fill=document.getElementById('token-fill');
   fill.style.width=pct+'%';
-  fill.style.background=pct>55?'#c0202a':pct>30?'#a05c00':'#0e7a56';
-  document.getElementById('token-label').textContent=`~${total}k / 200k`;
+  fill.style.background=total>200?'#c0202a':pct>30?'#a05c00':'#0e7a56';
+  const lbl=document.getElementById('token-label');
+  lbl.textContent=total>200?`~${total}k / 200k — LIMIT EXCEEDED`:`~${total}k / 200k`;
+  lbl.style.color=total>200?'#c0202a':'var(--muted)';
 }
 
 function selectFrame(fid){selectedId=selectedId===fid?null:fid;render()}
@@ -392,6 +448,50 @@ function doPush(){
   dynFrames.push({turnIdx:turnPtr,type:'type-turn',summarized:false});
   selectedId='turn-'+(dynFrames.length-1);
   turnPtr++;render();
+  if(calcTokens()>200){
+    document.getElementById('btn-push').disabled=true;
+    setTimeout(triggerAutoCompact,800);
+  }
+}
+
+function triggerAutoCompact(){
+  const overlay=document.getElementById('compact-overlay');
+  const bar=document.getElementById('compact-bar');
+  const msg=document.getElementById('compact-msg');
+  const sub=document.getElementById('compact-sub');
+  overlay.classList.add('active');
+
+  const steps=[
+    {pct:0,  dur:400,  msg:'Context limit exceeded — auto-compacting...',sub:'Analysing 7 turns of conversation history...'},
+    {pct:18, dur:900,  msg:'Compacting context window...',               sub:'Identifying key decisions and tool calls...'},
+    {pct:40, dur:1000, msg:'Compacting context window...',               sub:'Preserving auth.py diffs and test results...'},
+    {pct:64, dur:900,  msg:'Compacting context window...',               sub:'Writing summary of refactor session...'},
+    {pct:84, dur:800,  msg:'Finalising compact...',                      sub:'Rebuilding context from summary...'},
+    {pct:100,dur:600,  msg:'Done — context compacted.',                  sub:'Session ready to continue.'},
+  ];
+
+  let i=0;
+  function step(){
+    if(i>=steps.length){ setTimeout(finishCompact,500); return; }
+    const s=steps[i++];
+    bar.style.width=s.pct+'%';
+    msg.textContent=s.msg;
+    sub.textContent=s.sub;
+    setTimeout(step,s.dur);
+  }
+  step();
+}
+
+function finishCompact(){
+  const overlay=document.getElementById('compact-overlay');
+  overlay.classList.remove('active');
+  document.getElementById('compact-bar').style.width='0%';
+  document.getElementById('compact-msg').textContent='';
+  document.getElementById('compact-sub').textContent='';
+  dynFrames=[{summarized:true,type:'type-sumto',turnIdx:0,label:'Auto-compact summary'}];
+  selectedId=null;
+  document.getElementById('btn-push').disabled=false;
+  render();
 }
 
 function doRewind(mode){
@@ -399,14 +499,16 @@ function doRewind(mode){
   const si=parseInt(selectedId.replace('turn-',''));
   if(isNaN(si))return;
   if(mode==='both'){
+    // Full rollback — remove turns AND revert code
     dynFrames=dynFrames.slice(0,si);
     turnPtr=dynFrames.length?dynFrames[dynFrames.length-1].turnIdx+1:0;
   } else if(mode==='conv'){
-    dynFrames=dynFrames.slice(0,si);
+    // Restore conversation only — pop turns after selected point, code unchanged
+    dynFrames=dynFrames.slice(0,si).map(f=>({...f,codeReverted:false}));
     turnPtr=dynFrames.length?dynFrames[dynFrames.length-1].turnIdx+1:0;
   } else if(mode==='code'){
-    dynFrames=dynFrames.slice(0,si+1);
-    turnPtr=dynFrames.length?dynFrames[dynFrames.length-1].turnIdx+1:0;
+    // Restore code only — all frames stay, post-selection marked as code-reverted
+    dynFrames=dynFrames.map((f,i)=>({...f,codeReverted:i>si}));
   } else if(mode==='sumfrom'){
     const keep=dynFrames.slice(0,si+1);
     const refIdx=dynFrames[si].turnIdx;
@@ -421,9 +523,31 @@ function doRewind(mode){
   selectedId=null;render();
 }
 
-function doReset(){dynFrames=[];turnPtr=0;selectedId=null;render()}
+function doReset(){
+  dynFrames=[];turnPtr=0;selectedId=null;
+  const overlay=document.getElementById('compact-overlay');
+  overlay.classList.remove('active');
+  document.getElementById('compact-bar').style.width='0%';
+  document.getElementById('compact-msg').textContent='';
+  document.getElementById('compact-sub').textContent='';
+  document.getElementById('btn-push').disabled=false;
+  render();
+}
 
 render();
 </script>
+
+
+
+<!-- COMPACTION OVERLAY -->
+<div id="compact-overlay" style="position:fixed;inset:0;background:rgba(255,255,255,0.93);z-index:100">
+  <div style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600;color:#6b3fd4;letter-spacing:0.1em;background:#f3f0ff;border:1px solid #c8b8f4;padding:4px 14px;border-radius:6px">/compact</div>
+  <div style="font-size:15px;color:#1a1a18;font-weight:500;text-align:center" id="compact-msg"></div>
+  <div style="width:340px;height:5px;background:#eae9e5;border-radius:3px;overflow:hidden">
+    <div id="compact-bar" style="height:100%;width:0%;background:#6b3fd4;border-radius:3px;transition:width 0.35s ease"></div>
+  </div>
+  <div style="font-size:11px;color:#b0afa8;font-family:'JetBrains Mono',monospace;text-align:center" id="compact-sub"></div>
+</div>
+
 </body>
 </html>
