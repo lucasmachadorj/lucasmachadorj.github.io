@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>/rewind — Claude Code</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@300;400;500;600&display=swap');
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#ffffff;--surface:#f8f8f6;--surface2:#f2f1ee;--surface3:#eae9e5;
+    --border:#e2e1dc;--border2:#cccac4;--text:#1a1a18;--muted:#6b6a64;--hint:#b0afa8;
+    --blue:#1a5fd4;--blue-bg:#eef4ff;--blue-bd:#b8d0f8;
+    --purple:#6b3fd4;--purple-bg:#f3f0ff;--purple-bd:#c8b8f4;
+    --teal:#0e7a56;--teal-bg:#edfaf3;--teal-bd:#a8dfc6;
+    --amber:#a05c00;--amber-bg:#fff8ee;--amber-bd:#f0d090;
+    --orange:#c06020;--orange-bg:#fff4ee;--orange-bd:#f0c0a0;
+    --red:#c0202a;--green:#0e7a56;
+    --font-mono:'JetBrains Mono',monospace;--font-ui:'Inter',sans-serif;
+  }
+  body{font-family:var(--font-ui);background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  .topbar{display:flex;align-items:center;justify-content:space-between;padding:12px 24px;border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0}
+  .topbar-left{display:flex;align-items:center;gap:12px}
+  .cmd-pill{font-family:var(--font-mono);font-size:13px;font-weight:600;background:var(--purple-bg);color:var(--purple);border:1px solid var(--purple-bd);padding:4px 12px;border-radius:6px}
+  .topbar-title{font-size:13px;color:var(--muted)}
+  .topbar-right{display:flex;align-items:center;gap:16px}
+  .token-bar-wrap{display:flex;align-items:center;gap:8px}
+  .token-label{font-size:11px;color:var(--muted);font-family:var(--font-mono)}
+  .token-bar{width:120px;height:4px;background:var(--surface3);border-radius:2px;overflow:hidden}
+  .token-fill{height:100%;border-radius:2px;background:var(--teal);transition:width .4s,background .4s;width:4%}
+  .btn-reset{font-family:var(--font-ui);font-size:12px;color:var(--muted);background:var(--bg);border:1px solid var(--border);padding:5px 12px;border-radius:6px;cursor:pointer;transition:all .15s}
+  .btn-reset:hover{color:var(--text);border-color:var(--border2);background:var(--surface2)}
+  .main{display:grid;grid-template-columns:240px 1fr 290px;flex:1;overflow:hidden;height:calc(100vh - 49px)}
+  .panel{border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+  .panel:last-child{border-right:none}
+  .panel-header{padding:10px 16px;border-bottom:1px solid var(--border);font-size:10px;font-weight:600;letter-spacing:.1em;color:var(--muted);text-transform:uppercase;background:var(--surface);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+  .stack-scroll{flex:1;overflow-y:auto;padding:10px;display:flex;flex-direction:column-reverse;gap:5px}
+  .stack-scroll::-webkit-scrollbar{width:4px}
+  .stack-scroll::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+  .frame{border-radius:7px;padding:8px 10px;border:1px solid;cursor:pointer;transition:all .15s;position:relative;animation:fi .25s ease}
+  @keyframes fi{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+  .frame:hover{filter:brightness(.97)}
+  .frame.selected{box-shadow:0 0 0 2px var(--purple)}
+  .frame.summarized{border-style:dashed}
+  .frame.type-system{background:var(--blue-bg);border-color:var(--blue-bd)}
+  .frame.type-skills{background:var(--purple-bg);border-color:var(--purple-bd)}
+  .frame.type-memory{background:var(--teal-bg);border-color:var(--teal-bd)}
+  .frame.type-turn{background:var(--surface);border-color:var(--border2)}
+  .frame.type-sumfrom{background:var(--amber-bg);border-color:var(--amber-bd)}
+  .frame.type-sumto{background:var(--orange-bg);border-color:var(--orange-bd)}
+  .frame-name{font-family:var(--font-mono);font-size:11px;font-weight:500}
+  .frame.type-system .frame-name{color:var(--blue)}
+  .frame.type-skills .frame-name{color:var(--purple)}
+  .frame.type-memory .frame-name{color:var(--teal)}
+  .frame.type-turn   .frame-name{color:var(--text)}
+  .frame.type-sumfrom .frame-name{color:var(--amber)}
+  .frame.type-sumto   .frame-name{color:var(--orange)}
+  .frame-sub{font-size:10px;color:var(--muted);margin-top:2px;line-height:1.4}
+  .frame-badge{position:absolute;top:6px;right:8px;font-size:9px;font-weight:600;padding:1px 6px;border-radius:99px}
+  .badge-fixed{background:var(--blue-bg);color:var(--blue);border:1px solid var(--blue-bd)}
+  .badge-top{background:var(--purple-bg);color:var(--purple);border:1px solid var(--purple-bd)}
+  .badge-sumfrom{background:var(--amber-bg);color:var(--amber);border:1px solid var(--amber-bd)}
+  .badge-sumto{background:var(--orange-bg);color:var(--orange);border:1px solid var(--orange-bd)}
+  .stack-bottom{padding:8px 12px;font-size:10px;color:var(--hint);text-align:center;border-top:1px dashed var(--border);font-family:var(--font-mono);flex-shrink:0}
+  .push-btn{margin:10px 12px;padding:8px;background:var(--surface);border:1px solid var(--border2);border-radius:6px;color:var(--text);font-family:var(--font-ui);font-size:12px;cursor:pointer;transition:all .15s;flex-shrink:0}
+  .push-btn:hover:not(:disabled){background:var(--purple-bg);border-color:var(--purple);color:var(--purple)}
+  .push-btn:disabled{opacity:.35;cursor:not-allowed}
+  .diff-file-bar{padding:8px 16px;border-bottom:1px solid var(--border);font-family:var(--font-mono);font-size:11px;color:var(--muted);background:var(--surface);display:flex;align-items:center;gap:8px;flex-shrink:0}
+  .diff-file-bar .filename{color:var(--text)}
+  .diff-file-bar .stat-add{color:#1a7a4a}
+  .diff-file-bar .stat-rem{color:var(--red)}
+  .diff-scroll{flex:1;overflow-y:auto;font-family:var(--font-mono);font-size:12px;line-height:1.7}
+  .diff-scroll::-webkit-scrollbar{width:4px}
+  .diff-scroll::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+  .diff-empty{display:flex;align-items:center;justify-content:center;height:100%;color:var(--hint);font-size:12px;font-family:var(--font-mono)}
+  .diff-line{display:flex;padding:0 16px}
+  .diff-line.add{background:#edfaf3}
+  .diff-line.rem{background:#fff2f2}
+  .diff-line.hunk{background:#f3f0ff}
+  .diff-gutter{width:32px;color:var(--hint);user-select:none;flex-shrink:0;font-size:11px}
+  .diff-sign{width:14px;flex-shrink:0}
+  .diff-line.add .diff-sign{color:#1a7a4a}
+  .diff-line.rem .diff-sign{color:var(--red)}
+  .diff-line.hunk .diff-sign{color:var(--purple)}
+  .diff-code{color:var(--text);white-space:pre}
+  .diff-line.add .diff-code{color:#0e5a34}
+  .diff-line.rem .diff-code{color:#a01020}
+  .diff-line.hunk .diff-code{color:var(--purple);font-style:italic}
+  .diff-annotation{padding:10px 16px;font-size:11px;color:var(--muted);border-top:1px solid var(--border);background:var(--surface);font-family:var(--font-ui);flex-shrink:0;min-height:38px}
+  .action-scroll{flex:1;overflow-y:auto;padding:12px}
+  .action-section{margin-bottom:16px}
+  .action-section-title{font-size:9px;font-weight:600;letter-spacing:.12em;color:var(--hint);text-transform:uppercase;margin-bottom:8px;padding-left:2px}
+  .action-btn{width:100%;text-align:left;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-family:var(--font-ui);font-size:12px;cursor:pointer;margin-bottom:6px;transition:all .15s;display:flex;flex-direction:column;gap:3px}
+  .action-btn:hover:not(:disabled){border-color:var(--border2);background:var(--surface2)}
+  .action-btn:disabled{opacity:.28;cursor:not-allowed}
+  .ab-label{font-weight:500;font-size:12px;display:flex;align-items:center;gap:6px}
+  .ab-desc{font-size:10px;color:var(--muted);line-height:1.4}
+  .ab-cmd{font-family:var(--font-mono);font-size:10px;color:var(--purple);margin-top:2px}
+  .action-btn.mode-both{border-color:var(--blue-bd)}
+  .action-btn.mode-both:hover:not(:disabled){background:var(--blue-bg);border-color:var(--blue)}
+  .action-btn.mode-both .ab-label{color:var(--blue)}
+  .action-btn.mode-conv{border-color:var(--purple-bd)}
+  .action-btn.mode-conv:hover:not(:disabled){background:var(--purple-bg);border-color:var(--purple)}
+  .action-btn.mode-conv .ab-label{color:var(--purple)}
+  .action-btn.mode-code{border-color:var(--teal-bd)}
+  .action-btn.mode-code:hover:not(:disabled){background:var(--teal-bg);border-color:var(--teal)}
+  .action-btn.mode-code .ab-label{color:var(--teal)}
+  .action-btn.mode-sumfrom{border-color:var(--amber-bd)}
+  .action-btn.mode-sumfrom:hover:not(:disabled){background:var(--amber-bg);border-color:var(--amber)}
+  .action-btn.mode-sumfrom .ab-label{color:var(--amber)}
+  .action-btn.mode-sumto{border-color:var(--orange-bd)}
+  .action-btn.mode-sumto:hover:not(:disabled){background:var(--orange-bg);border-color:var(--orange)}
+  .action-btn.mode-sumto .ab-label{color:var(--orange)}
+  .select-hint{font-size:10px;color:var(--muted);padding:8px 12px;background:var(--surface);border:1px solid var(--border);border-radius:6px;margin-bottom:12px;line-height:1.5;font-family:var(--font-mono)}
+  .shortcut-hint{font-size:10px;color:var(--muted);padding:10px 12px;border-top:1px solid var(--border);flex-shrink:0;line-height:1.8}
+  .kbd{display:inline-block;font-family:var(--font-mono);font-size:10px;background:var(--surface2);border:1px solid var(--border2);border-radius:3px;padding:1px 5px;color:var(--text)}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-left">
+    <span class="cmd-pill">/rewind</span>
+    <span class="topbar-title">Claude Code · context window as a stack · auth.py simulation</span>
+  </div>
+  <div class="topbar-right">
+    <div class="token-bar-wrap">
+      <span class="token-label" id="token-label">~8k / 200k</span>
+      <div class="token-bar"><div class="token-fill" id="token-fill"></div></div>
+    </div>
+    <button class="btn-reset" onclick="doReset()">↺ reset</button>
+  </div>
+</div>
+
+<div class="main">
+
+  <div class="panel" style="background:var(--bg)">
+    <div class="panel-header">
+      <span>Context stack</span>
+      <span id="frame-count" style="color:var(--hint);font-family:var(--font-mono);font-size:10px">3 frames</span>
+    </div>
+    <div class="stack-scroll" id="stack"></div>
+    <div class="stack-bottom">⊥ bottom · always present</div>
+    <button class="push-btn" id="btn-push" onclick="doPush()">+ next agent turn</button>
+  </div>
+
+  <div class="panel" style="background:var(--bg)">
+    <div class="panel-header">
+      <span>auth.py</span>
+      <span id="diff-stats" style="font-family:var(--font-mono);font-size:10px;color:var(--muted)"></span>
+    </div>
+    <div class="diff-file-bar" id="diff-file-bar" style="display:none">
+      <span class="filename">auth.py</span>
+      <span id="diff-adds" class="stat-add"></span>
+      <span id="diff-rems" class="stat-rem"></span>
+    </div>
+    <div class="diff-scroll" id="diff-scroll">
+      <div class="diff-empty">← push a turn to see code changes</div>
+    </div>
+    <div class="diff-annotation" id="diff-annotation"></div>
+  </div>
+
+  <div class="panel" style="background:var(--bg)">
+    <div class="panel-header">Rewind actions</div>
+    <div class="action-scroll">
+
+      <div class="select-hint" id="select-hint">Click a turn frame on the stack to select a rewind point.</div>
+
+      <div class="action-section">
+        <div class="action-section-title">Restore to selected point</div>
+
+        <button class="action-btn mode-both" id="btn-both" onclick="doRewind('both')" disabled>
+          <div class="ab-label">↩ Restore code + conversation</div>
+          <div class="ab-desc">Full rollback. Files and all turns after the point are removed.</div>
+          <div class="ab-cmd">Esc Esc → Restore code and conversation</div>
+        </button>
+
+        <button class="action-btn mode-conv" id="btn-conv" onclick="doRewind('conv')" disabled>
+          <div class="ab-label">↩ Restore conversation only</div>
+          <div class="ab-desc">Keep code changes, undo the chat. Edits were fine, reasoning wasn't.</div>
+          <div class="ab-cmd">Esc Esc → Restore conversation</div>
+        </button>
+
+        <button class="action-btn mode-code" id="btn-code" onclick="doRewind('code')" disabled>
+          <div class="ab-label">↩ Restore code only</div>
+          <div class="ab-desc">Undo file changes, keep conversation. Preserve analysis, revert the edit.</div>
+          <div class="ab-cmd">Esc Esc → Restore code</div>
+        </button>
+      </div>
+
+      <div class="action-section">
+        <div class="action-section-title">Compress context</div>
+
+        <button class="action-btn mode-sumfrom" id="btn-sumfrom" onclick="doRewind('sumfrom')" disabled>
+          <div class="ab-label">⊞ Summarize from here</div>
+          <div class="ab-desc">Turns after the selected point collapse into one summary. Saves context, keeps the gist of what came after.</div>
+          <div class="ab-cmd">Esc Esc → Summarize from here</div>
+        </button>
+
+        <button class="action-btn mode-sumto" id="btn-sumto" onclick="doRewind('sumto')" disabled>
+          <div class="ab-label">⊟ Summarize up to here</div>
+          <div class="ab-desc">Turns before the selected point collapse into a summary. Compresses old history, keeps recent turns intact.</div>
+          <div class="ab-cmd">Esc Esc → Summarize up to here</div>
+        </button>
+      </div>
+
+    </div>
+    <div class="shortcut-hint">
+      <kbd class="kbd">Esc</kbd> <kbd class="kbd">Esc</kbd> opens rewind menu<br>
+      <kbd class="kbd">/rewind</kbd> &nbsp;same as above<br>
+      <kbd class="kbd">/checkpoint</kbd> &nbsp;alias for /rewind
+    </div>
+  </div>
+
+</div>
+
+<script>
+const FIXED = [
+  { type:'system', name:'System prompt',  sub:'Identity · goals · constraints' },
+  { type:'skills', name:'Skills & tools', sub:'Tool schemas · MCP definitions'  },
+  { type:'memory', name:'Memory',         sub:'Retrieved facts · preferences'   },
+];
+
+const TURNS = [
+  { name:'Turn 1 — read file',       sub:'read_file auth.py',                   annotation:'Model reads the existing auth.py. No changes yet — context window loads the full file.',                                        diff:null,                          tokens:18 },
+  { name:'Turn 2 — extract hash fn', sub:'write_file auth.py',                  annotation:'Agent extracts inline password hashing into a dedicated hash_password() function.',
+    diff:{ adds:8, rems:3, lines:[
+      {type:'hunk',code:'@@ -1,12 +1,17 @@'},
+      {type:'ctx', code:'import os'},
+      {type:'ctx', code:'import hmac'},
+      {type:'add', code:'+import hashlib'},
+      {type:'ctx', code:''},
+      {type:'ctx', code:'SECRET = os.environ["SECRET_KEY"]'},
+      {type:'ctx', code:''},
+      {type:'add', code:'+def hash_password(password: str) -> str:'},
+      {type:'add', code:'+    salt = os.urandom(16)'},
+      {type:'add', code:'+    key = hashlib.pbkdf2_hmac('},
+      {type:'add', code:'+        "sha256", password.encode(), salt, 260000'},
+      {type:'add', code:'+    )'},
+      {type:'add', code:'+    return salt.hex() + ":" + key.hex()'},
+      {type:'add', code:'+'},
+      {type:'ctx', code:' def authenticate(username, password):'},
+      {type:'rem', code:'-    hashed = hmac.new(SECRET, password).digest()'},
+      {type:'rem', code:'-    hashed = hashed.hex()'},
+      {type:'rem', code:'-    return db.check(username, hashed)'},
+      {type:'add', code:'+    hashed = hash_password(password)'},
+      {type:'add', code:'+    return db.check(username, hashed)'},
+    ]}, tokens:28 },
+  { name:'Turn 3 — add JWT',         sub:'write_file auth.py',                  annotation:'Agent adds JWT token generation and a verify_token() function.',
+    diff:{ adds:14, rems:0, lines:[
+      {type:'hunk',code:'@@ -3,6 +3,20 @@'},
+      {type:'ctx', code:'import hashlib'},
+      {type:'ctx', code:'import os'},
+      {type:'add', code:'+import jwt'},
+      {type:'add', code:'+import datetime'},
+      {type:'ctx', code:''},
+      {type:'ctx', code:'SECRET = os.environ["SECRET_KEY"]'},
+      {type:'add', code:'+JWT_ALGO = "HS256"'},
+      {type:'add', code:''},
+      {type:'add', code:'+def generate_token(user_id: int) -> str:'},
+      {type:'add', code:'+    payload = {'},
+      {type:'add', code:'+        "sub": user_id,'},
+      {type:'add', code:'+        "iat": datetime.datetime.utcnow(),'},
+      {type:'add', code:'+        "exp": datetime.datetime.utcnow()'},
+      {type:'add', code:'+               + datetime.timedelta(hours=8),'},
+      {type:'add', code:'+    }'},
+      {type:'add', code:'+    return jwt.encode(payload, SECRET, algorithm=JWT_ALGO)'},
+      {type:'add', code:'+'},
+      {type:'add', code:'+def verify_token(token: str) -> dict:'},
+      {type:'add', code:'+    return jwt.decode(token, SECRET, algorithms=[JWT_ALGO])'},
+    ]}, tokens:40 },
+  { name:'Turn 4 — run tests ✗',     sub:'bash: pytest tests/test_auth.py',     annotation:'2 test failures. ImportError: No module named jwt. Missing dependency in requirements.txt.',      diff:null, isError:true,   tokens:52 },
+  { name:'Turn 5 — fix import',      sub:'write_file requirements.txt + auth.py',annotation:'Agent adds PyJWT to requirements and fixes the import alias (jwt → PyJWT convention).',
+    diff:{ adds:3, rems:1, lines:[
+      {type:'hunk',code:'@@ -1,6 +1,8 @@ requirements.txt'},
+      {type:'ctx', code:'flask==3.0.2'},
+      {type:'ctx', code:'sqlalchemy==2.0.29'},
+      {type:'add', code:'+PyJWT==2.8.0'},
+      {type:'ctx', code:''},
+      {type:'hunk',code:'@@ -3,7 +3,7 @@ auth.py'},
+      {type:'rem', code:'-import jwt'},
+      {type:'add', code:'+import jwt  # PyJWT'},
+      {type:'ctx', code:' import datetime'},
+    ]}, tokens:66 },
+  { name:'Turn 6 — run tests ✓',     sub:'bash: pytest tests/test_auth.py',     annotation:'All 8 tests passing. auth.py refactor complete.',                                                    diff:null, isSuccess:true, tokens:74 },
+];
+
+let dynFrames=[], turnPtr=0, selectedId=null;
+
+function render(){ renderStack(); renderDiff(); renderActions(); renderTokens(); }
+
+function renderStack(){
+  const el=document.getElementById('stack');
+  el.innerHTML='';
+  FIXED.forEach(f=>{
+    const d=document.createElement('div');
+    d.className=`frame type-${f.type}`;
+    d.innerHTML=`<div class="frame-badge badge-fixed">fixed</div><div class="frame-name">${f.name}</div><div class="frame-sub">${f.sub}</div>`;
+    el.appendChild(d);
+  });
+  dynFrames.forEach((f,i)=>{
+    const fid='turn-'+i;
+    const isTop=i===dynFrames.length-1;
+    const isSelected=selectedId===fid;
+    const d=document.createElement('div');
+    d.className=['frame', f.type||'type-turn', isSelected?'selected':'', f.summarized?'summarized':''].join(' ');
+    d.onclick=()=>selectFrame(fid);
+    let badge=isTop&&!f.summarized?`<div class="frame-badge badge-top">TOP</div>`:'';
+    if(f.type==='type-sumfrom') badge=`<div class="frame-badge badge-sumfrom">summary</div>`;
+    if(f.type==='type-sumto')   badge=`<div class="frame-badge badge-sumto">summary</div>`;
+    const name=f.summarized?('⊞ '+f.label):TURNS[f.turnIdx].name;
+    const sub =f.summarized?'Compressed context':TURNS[f.turnIdx].sub;
+    d.innerHTML=`${badge}<div class="frame-name">${name}</div><div class="frame-sub">${sub}</div>`;
+    el.appendChild(d);
+  });
+  document.getElementById('frame-count').textContent=(3+dynFrames.length)+' frames';
+}
+
+function renderDiff(){
+  const scroll=document.getElementById('diff-scroll');
+  const ann=document.getElementById('diff-annotation');
+  const fb=document.getElementById('diff-file-bar');
+  const se=document.getElementById('diff-stats');
+  let turn=null;
+  if(selectedId){
+    const idx=parseInt(selectedId.replace('turn-',''));
+    if(!isNaN(idx)&&dynFrames[idx]&&!dynFrames[idx].summarized) turn=TURNS[dynFrames[idx].turnIdx];
+  } else if(dynFrames.length>0&&!dynFrames[dynFrames.length-1].summarized){
+    turn=TURNS[dynFrames[dynFrames.length-1].turnIdx];
+  }
+  if(!turn){
+    scroll.innerHTML='<div class="diff-empty">← push a turn to see code changes</div>';
+    ann.textContent=''; fb.style.display='none'; se.textContent=''; return;
+  }
+  ann.textContent=turn.annotation;
+  if(!turn.diff){
+    fb.style.display='none'; se.textContent='';
+    const msg=turn.isError?'⚠ No file changes — test runner output':turn.isSuccess?'✓ No file changes — all tests passed':'No file changes this turn.';
+    const col=turn.isError?'#c0202a':turn.isSuccess?'#0e7a56':'var(--hint)';
+    scroll.innerHTML=`<div class="diff-empty" style="color:${col}">${msg}</div>`; return;
+  }
+  fb.style.display='flex';
+  document.getElementById('diff-adds').textContent=`+${turn.diff.adds}`;
+  document.getElementById('diff-rems').textContent=`-${turn.diff.rems}`;
+  se.textContent=`+${turn.diff.adds} -${turn.diff.rems}`;
+  let html='',ln=1;
+  turn.diff.lines.forEach(l=>{
+    const g=l.type==='hunk'?'':ln++;
+    const s=l.type==='add'?'+':l.type==='rem'?'-':l.type==='hunk'?'':' ';
+    html+=`<div class="diff-line ${l.type}"><span class="diff-gutter">${g}</span><span class="diff-sign">${s}</span><span class="diff-code">${esc(l.code)}</span></div>`;
+  });
+  scroll.innerHTML=html;
+}
+
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+
+function renderActions(){
+  const hasSel=selectedId!==null;
+  const selIdx=hasSel?parseInt(selectedId.replace('turn-','')):-1;
+  const selFrame=hasSel?dynFrames[selIdx]:null;
+  const isSummary=selFrame&&selFrame.summarized;
+  const after=hasSel?dynFrames.length-1-selIdx:0;
+  const before=hasSel?selIdx:0;
+  const hasDiff=selFrame&&!selFrame.summarized&&TURNS[selFrame.turnIdx]&&TURNS[selFrame.turnIdx].diff!=null;
+  document.getElementById('btn-both').disabled=!hasSel||isSummary||!hasDiff;
+  document.getElementById('btn-conv').disabled=!hasSel||isSummary;
+  document.getElementById('btn-code').disabled=!hasSel||isSummary||!hasDiff;
+  document.getElementById('btn-sumfrom').disabled=!hasSel||after<1||isSummary;
+  document.getElementById('btn-sumto').disabled=!hasSel||before<1||isSummary;
+  const hint=document.getElementById('select-hint');
+  if(!dynFrames.length) hint.textContent='Push turns to build the stack, then select a frame to rewind.';
+  else if(!hasSel) hint.textContent='Click any turn frame on the stack to select a rewind point.';
+  else{
+    const name=isSummary?'Summary frame':TURNS[selFrame.turnIdx]?.name||'—';
+    hint.textContent=`Selected: ${name}. Choose an action below.`;
+  }
+}
+
+function renderTokens(){
+  const total=dynFrames.reduce((a,f)=>a+(f.summarized?6:TURNS[f.turnIdx].tokens),8);
+  const pct=Math.min((total/200)*100,100);
+  const fill=document.getElementById('token-fill');
+  fill.style.width=pct+'%';
+  fill.style.background=pct>55?'#c0202a':pct>30?'#a05c00':'#0e7a56';
+  document.getElementById('token-label').textContent=`~${total}k / 200k`;
+}
+
+function selectFrame(fid){selectedId=selectedId===fid?null:fid;render()}
+
+function doPush(){
+  if(turnPtr>=TURNS.length)return;
+  dynFrames.push({turnIdx:turnPtr,type:'type-turn',summarized:false});
+  selectedId='turn-'+(dynFrames.length-1);
+  turnPtr++;render();
+}
+
+function doRewind(mode){
+  if(!selectedId)return;
+  const si=parseInt(selectedId.replace('turn-',''));
+  if(isNaN(si))return;
+  if(mode==='both'){
+    dynFrames=dynFrames.slice(0,si);
+    turnPtr=dynFrames.length?dynFrames[dynFrames.length-1].turnIdx+1:0;
+  } else if(mode==='conv'){
+    dynFrames=dynFrames.slice(0,si);
+    turnPtr=dynFrames.length?dynFrames[dynFrames.length-1].turnIdx+1:0;
+  } else if(mode==='code'){
+    dynFrames=dynFrames.slice(0,si+1);
+    turnPtr=dynFrames.length?dynFrames[dynFrames.length-1].turnIdx+1:0;
+  } else if(mode==='sumfrom'){
+    const keep=dynFrames.slice(0,si+1);
+    const refIdx=dynFrames[si].turnIdx;
+    dynFrames=[...keep,{summarized:true,type:'type-sumfrom',turnIdx:refIdx,label:'Summary (from here)'}];
+    turnPtr=TURNS.length;
+  } else if(mode==='sumto'){
+    const keep=dynFrames.slice(si);
+    const refIdx=dynFrames[0].turnIdx;
+    dynFrames=[{summarized:true,type:'type-sumto',turnIdx:refIdx,label:'Summary (up to here)'},...keep];
+    turnPtr=dynFrames.filter(f=>!f.summarized).reduce((m,f)=>Math.max(m,f.turnIdx),-1)+1;
+  }
+  selectedId=null;render();
+}
+
+function doReset(){dynFrames=[];turnPtr=0;selectedId=null;render()}
+
+render();
+</script>
+</body>
+</html>
